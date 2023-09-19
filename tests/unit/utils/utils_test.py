@@ -26,17 +26,17 @@ import pytest
 import pytest_mock
 import yaml
 
-import AutoMLOps.utils.utils
-from AutoMLOps.utils.utils import (
+import google_cloud_automlops.utils.utils
+from google_cloud_automlops.utils.utils import (
     delete_file,
     execute_process,
-    format_spec_dict,
     get_components_list,
     get_function_source_definition,
     is_component_config,
     make_dirs,
     read_file,
     read_yaml_file,
+    stringify_job_spec_list,
     update_params,
     validate_schedule,
     write_and_chmod,
@@ -44,18 +44,28 @@ from AutoMLOps.utils.utils import (
     write_yaml_file
 )
 
+
 # Define simple functions to be used in tests
 def func1(x):
     return x + 1
+
+
 def func2(x, y):
     return x + y
+
+
 def func3(x, y, z):
     return x + y + z
+
+
 def func4():
+
     def inner_func():
         res = 1 + 1
         return res
+
     return inner_func()
+
 
 @pytest.mark.parametrize(
     'directories, existance, expectation',
@@ -84,6 +94,7 @@ def test_make_dirs(directories: List[str], existance: List[bool], expectation):
             assert os.path.exists(directory) == exist
             if exist:
                 os.rmdir(directory)
+
 
 @pytest.mark.parametrize(
     'filepath, content1, content2, expectation',
@@ -126,6 +137,7 @@ def test_read_yaml_file(filepath: str, content1: dict, content2: str, expectatio
         assert read_yaml_file(filepath=filepath) == content1
     os.remove(path=filepath)
 
+
 @pytest.mark.parametrize(
     'filepath, mode, expectation',
     [
@@ -158,6 +170,7 @@ def test_write_yaml(filepath: str, mode: str, expectation):
             assert yaml.safe_load(file) == contents
         os.remove(path=filepath)
 
+
 @pytest.mark.parametrize(
     'filepath, text, write_file_bool, expectation',
     [
@@ -187,6 +200,7 @@ def test_read_file(filepath: str, text: str, write_file_bool: bool, expectation)
         assert read_file(filepath=filepath) == text
     if os.path.exists(filepath):
         os.remove(filepath)
+
 
 @pytest.mark.parametrize(
     'filepath, text, mode, expectation',
@@ -220,6 +234,7 @@ def test_write_file(filepath: str, text: str, mode: str, expectation):
             assert text == file.read()
         os.remove(filepath)
 
+
 def test_write_and_chmod():
     """Tests write_and_chmod, which writes a file at the specified path
     and chmods the file to allow for execution.
@@ -240,6 +255,7 @@ def test_write_and_chmod():
         contents = file.read()
     assert contents == 'This is a test file.'
     os.remove('test.txt')
+
 
 @pytest.mark.parametrize(
     'file_to_delete, valid_file',
@@ -265,6 +281,7 @@ def test_delete_file(file_to_delete: str, valid_file: bool):
             file.write('This is a test file.')
             delete_file(file_to_delete)
             assert not os.path.exists(file_to_delete)
+
 
 @pytest.mark.parametrize(
     'comp_path, comp_name, patch_cwd, expectation',
@@ -296,7 +313,7 @@ def test_get_components_list(mocker: pytest_mock.MockerFixture,
             parameters.
     """
     if patch_cwd:
-        mocker.patch.object(AutoMLOps.utils.utils, 'CACHE_DIR', '.')
+        mocker.patch.object(google_cloud_automlops.utils.utils, 'CACHE_DIR', '.')
     if comp_path:
         for file in comp_path:
             with open(file=file, mode='w', encoding='utf-8') as f:
@@ -313,6 +330,7 @@ def test_get_components_list(mocker: pytest_mock.MockerFixture,
     for file in comp_path:
         if os.path.exists(file):
             os.remove(file)
+
 
 @pytest.mark.parametrize(
     'yaml_contents, expectation',
@@ -349,6 +367,7 @@ def test_is_component_config(yaml_contents: dict, expectation: bool):
     assert expectation == is_component_config('component.yaml')
     os.remove('component.yaml')
 
+
 @pytest.mark.parametrize(
     'command, to_null, expectation',
     [
@@ -378,27 +397,29 @@ def test_execute_process(command: str, to_null: bool, expectation: bool):
         assert os.path.exists('test.txt')
         os.remove('test.txt')
 
+
 @pytest.mark.parametrize(
-    'sch_pattern, run_local, expectation',
+    'sch_pattern, use_ci, expectation',
     [
         ('No Schedule Specified', True, does_not_raise()),
         ('No Schedule Specified', False, does_not_raise()),
-        ('Schedule', True, pytest.raises(ValueError)),
-        ('Schedule', False, does_not_raise())
+        ('Schedule', False, pytest.raises(ValueError)),
+        ('Schedule', True, does_not_raise())
     ]
 )
-def test_validate_schedule(sch_pattern: str, run_local: bool, expectation):
+def test_validate_schedule(sch_pattern: str, use_ci: bool, expectation):
     """Tests validate_schedule, which validates the inputted schedule
     parameter. There are four test cases for this function, which tests each
     combination of sch_pattern and run_loc for the expected results.
 
     Args:
         sch_pattern (str): Cron formatted value used to create a Scheduled retrain job.
-        run_local (bool): Flag that determines whether to use Cloud Run CI/CD.
+        use_ci (bool): Flag that determines whether to use Cloud Run CI/CD.
         expectation: Any corresponding expected errors for each set of parameters.
     """
     with expectation:
-        validate_schedule(schedule_pattern=sch_pattern, run_local=run_local)
+        validate_schedule(schedule_pattern=sch_pattern, use_ci=use_ci)
+
 
 @pytest.mark.parametrize(
     'params, expected_output',
@@ -407,8 +428,8 @@ def test_validate_schedule(sch_pattern: str, run_local: bool, expectation):
         ([{'name': 'param2', 'type': str}], [{'name': 'param2', 'type': 'String'}]),
         ([{'name': 'param3', 'type': float}], [{'name': 'param3', 'type': 'Float'}]),
         ([{'name': 'param4', 'type': bool}], [{'name': 'param4', 'type': 'Bool'}]),
-        ([{'name': 'param5', 'type': list}], [{'name': 'param5', 'type': 'List'}]),
-        ([{'name': 'param6', 'type': dict}], [{'name': 'param6', 'type': 'Dict'}]),
+        ([{'name': 'param5', 'type': list}], [{'name': 'param5', 'type': 'JsonArray'}]),
+        ([{'name': 'param6', 'type': dict}], [{'name': 'param6', 'type': 'JsonObject'}]),
         ([{'name': 'param6', 'type': pd.DataFrame}], None)
     ]
 )
@@ -430,13 +451,14 @@ def test_update_params(params: List[dict], expected_output: List[dict]):
         with pytest.raises(ValueError):
             assert update_params(params=params)
 
+
 @pytest.mark.parametrize(
     'func, expected_output',
     [
         (func1, 'def func1(x):\n    return x + 1\n'),
         (func2, 'def func2(x, y):\n    return x + y\n'),
         (func3, 'def func3(x, y, z):\n    return x + y + z\n'),
-        (func4, 'def func4():\n    def inner_func():\n        res = 1 + 1\n        return res\n    return inner_func()\n')
+        (func4, 'def func4():\n\n    def inner_func():\n        res = 1 + 1\n        return res\n\n    return inner_func()\n')
     ]
 )
 def test_get_function_source_definition(func: Callable, expected_output: str):
@@ -449,34 +471,52 @@ def test_get_function_source_definition(func: Callable, expected_output: str):
     """
     assert expected_output == get_function_source_definition(func=func)
 
+
 @pytest.mark.parametrize(
-    'job_spec, expected_output',
+    'job_spec_list, expected_output',
     [
-        (
-            {'component_spec': 'train_model'},
-            '''{\n       'component_spec': train_model,\n    }\n'''
-        ),
-        (
-            {'component_spec': 'train_model', 'other_spec': 'other_value'},
-            '''{\n       'component_spec': train_model,\n       'other_spec': 'other_value',\n    }\n'''
-        ),
-        (
-            {},
-            '{\n    \n    }\n'
-        ),
-        (
-            {'{': '}'},
-            '''{\n       '{': '}',\n    }\n'''
-        )
+        ([{'component_spec': 'train_model',
+           'display_name': 'train-model-accelerated',
+           'machine_type': 'a2-highgpu-1g',
+           'accelerator_type': 'NVIDIA_TESLA_A100',
+           'accelerator_count': 1}],
+          [{'component_spec': 'train_model',
+            'spec_string':
+            '''{\n'''
+            '''        "accelerator_count": 1,\n'''
+            '''        "accelerator_type": "NVIDIA_TESLA_A100",\n'''
+            '''        "component_spec": train_model,\n'''
+            '''        "display_name": "train-model-accelerated",\n'''
+            '''        "machine_type": "a2-highgpu-1g"\n    }'''
+         }]),
     ]
 )
-def test_format_spec_dict(job_spec: dict, expected_output: dict):
-    """Tests format_spec_dict, which takes in a spec dictionary and removes
-    the quotes around the component op name.
+def test_stringify_job_spec_list(job_spec_list: List[dict], expected_output: List[dict]):
+    """Tests the stringify_job_spec_list function, takes in a list of custom training job spec
+    dictionaries and turns them into strings.
 
     Args:
-        job_spec (dict): Component spec dictionary.
-        expected_output (dict): Expected outcome.
+        job_spec: Dictionary with job spec info. e.g.
+            input = [{
+                       'component_spec': 'train_model',
+                       'display_name': 'train-model-accelerated',
+                       'machine_type': 'a2-highgpu-1g',
+                       'accelerator_type': 'NVIDIA_TESLA_A100',
+                       'accelerator_count': 1
+            }]
+        expected_output (List[dict]): Dictionary with key value pair for component_spec,
+            and a string representation of the full dictionary e.g.
+            output = [{
+                       'component_spec': 'train_model',
+                       'spec_string': '''{
+        "accelerator_count": 1,
+        "accelerator_type": "NVIDIA_TESLA_A100",
+        "component_spec": train_model,
+        "display_name": "train-model-accelerated",
+        "machine_type": "a2-highgpu-1g"
+    }'''
+            }]
     """
-    formatted_spec = format_spec_dict(job_spec=job_spec)
+
+    formatted_spec = stringify_job_spec_list(job_spec_list=job_spec_list)
     assert formatted_spec == expected_output
